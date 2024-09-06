@@ -1,0 +1,6 @@
+../Core/Src/spi_data.c:13:6:commandSerialize	1
+../Core/Src/spi_data.c:28:6:commandDeserialize	3
+../Core/Src/spi_data.c:38:6:resultSerialize	1
+../Core/Src/spi_data.c:57:6:resultDeserialize	4
+../Core/Src/spi_data.c:70:10:float32ToFloat16	3
+../Core/Src/spi_data.c:93:7:float16ToFloat32	8

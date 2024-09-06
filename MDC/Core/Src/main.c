@@ -21,6 +21,13 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdbool.h>
+#include <math.h>
+#include <stdio.h>
+
+#include "define.h"
+#include "spi.h"
+#include "can.h"
 
 /* USER CODE END Includes */
 
@@ -50,6 +57,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart2;
 
@@ -68,13 +76,44 @@ static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+bool g_main_loop_flag;
+bool g_control;
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim == &htim6)
+	{
+		static size_t spi_timeout_cnt=0;
+		if(isSpiUpdated()) spi_timeout_cnt = 0;
+		if(spi_timeout_cnt++ >= 5) {
+			g_control = false;
+			printf("SPI TIMEOUT ERROR\r\n");
+		}
+		static size_t power_timeout_cnt=0;
+		if(isPowerUpdated()) power_timeout_cnt = 0;
+		if(power_timeout_cnt++ >= 5) {
+			g_control = false;
+			printf("POWER TIMEOUT ERROR\r\n");
+		}
+		if(g_main_loop_flag){
+			printf("Control cycle is slow\r\n");
+		}
+		else{
+			g_main_loop_flag = true;
+		}
+	}
+	if(htim == &htim7){
+		sendPowerCanData();
+	}
+
+}
 /* USER CODE END 0 */
 
 /**
@@ -114,14 +153,126 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_TIM6_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
-
+	PIController pid;
+	pid.kp = 5.0f;
+	pid.ki = 5.0f;
+	pid.integral_l = 0.0f;
+	pid.integral_r = 0.0f;
+	spiInit(&hspi1);
+	canInit(&hcan);
+	HAL_TIM_Encoder_Start( &htim2, TIM_CHANNEL_ALL );
+	HAL_TIM_Encoder_Start( &htim3, TIM_CHANNEL_ALL );
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+	HAL_TIM_Base_Start_IT(&htim6);
+	HAL_Delay(100);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+  	//wait main_loop_flag
+		while(g_main_loop_flag == false){}
+
+		//SPI
+		Command command;
+		getSpiData(&command);
+		//CAN
+		setPowerCanData(&command.power_command);
+
+
+
+		//encoder
+		static int last_cnt_l;
+		static int last_cnt_r;
+		int16_t cnt_l = TIM2->CNT;
+		int16_t cnt_r = TIM3->CNT;
+		if (last_cnt_l > 0 && cnt_l < 0 && (last_cnt_l - cnt_l) > 0)
+			last_cnt_l -= 0x10000; //オーバーフロー
+		else if (last_cnt_l < 0 && cnt_l > 0 && (last_cnt_l - cnt_l) < 0)
+			last_cnt_l += 0x10000; //アンダーフロー
+		if (last_cnt_r > 0 && cnt_r < 0 && (last_cnt_r - cnt_r) > 0)
+			last_cnt_r -= 0x10000; //オーバーフロー
+		else if (last_cnt_r < 0 && cnt_r > 0 && (last_cnt_r - cnt_r) < 0)
+			last_cnt_r += 0x10000; //アンダーフロー
+		HAL_TIM_Encoder_Start( &htim2, TIM_CHANNEL_ALL );
+		HAL_TIM_Encoder_Start( &htim3, TIM_CHANNEL_ALL );
+		float vel_l = ((float) ((int) cnt_l) * ENC_TO_TIRE * RATE) / RESOLUTION;
+		float vel_r = ((float) ((int) cnt_r) * ENC_TO_TIRE * RATE) / RESOLUTION;
+
+		//PI control
+		float volt_l;
+		float volt_r;
+		if (g_control) {
+			float e_l = command.vel_l - vel_l;
+			float e_r = command.vel_r - vel_r;
+			if(fabsf(e_l)>10.0f) e_l = 0;
+			if(fabsf(e_r)>10.0f) e_r = 0;
+			pid.integral_l += e_l * DT;
+			pid.integral_r += e_r * DT;
+			pid.integral_l = fmaxf(fminf(pid.integral_l,2.5f),-2.5f);
+			pid.integral_r = fmaxf(fminf(pid.integral_r,2.5f),-2.5f);
+			volt_l = pid.kp * e_l + pid.ki * pid.integral_l;
+			volt_r = pid.kp * e_r + pid.ki * pid.integral_r;
+			//線形化
+			volt_l = (volt_l > 0.0f) ? volt_l + 0.9f : volt_l - 0.9f;
+			volt_r = (volt_r > 0.0f) ? volt_r + 0.9f : volt_r - 0.9f;
+//			volt_l = fmaxf(fminf(volt_l,12.0f),-12.0f);
+//			volt_r = fmaxf(fminf(volt_r,12.0f),-12.0f);
+			volt_l = fmaxf(fminf(volt_l, 6.0f), -6.0f);
+			volt_r = fmaxf(fminf(volt_r, 6.0f), -6.0f);
+
+		}
+		else{
+			// error
+			// 指令速度異常
+			// PID制御異常
+			// タイヤ速度異常
+			// SPI通信異常
+			// CAN通信異常
+
+
+			pid.integral_l = 0.0f;
+			pid.integral_r = 0.0f;
+			volt_l = 0.0f;
+			volt_r = 0.0f;
+
+		}
+
+		//PWM
+		uint32_t pwm_l;
+		uint32_t pwm_r;
+		bool dir_l;
+		bool dir_r;
+		if (g_control){
+			pwm_l = (uint32_t)(MAX_DUTY_CNT * (fabsf(volt_l)/12.0f));
+			pwm_r = (uint32_t)(MAX_DUTY_CNT * (fabsf(volt_r)/12.0f));
+			dir_l = (volt_l > 0.0f) ? true : false;
+			dir_r = (volt_r > 0.0f) ? true : false;
+		}
+		else{
+			pwm_l = 0;
+			pwm_r = 0;
+			dir_l = false;
+			dir_r = false;
+		}
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm_l);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm_r);
+		HAL_GPIO_WritePin(DIR_L_GPIO_Port, DIR_L_Pin, dir_l);
+		HAL_GPIO_WritePin(DIR_R_GPIO_Port, DIR_R_Pin, dir_r);
+		//return SPI&CAN
+		Result result;
+		getPowerCanData(&result.power_result);
+		result.vel_l = vel_l;
+		result.vel_r = vel_r;
+		result.cnt_l = TIM2->CNT;
+		result.cnt_r = TIM3->CNT;
+		setSpiData(&result);
+		//printf("cmd:(%f,%f) volt:(%f,%f) vel:(%f,%f)\r\n",cmd_vel_l,cmd_vel_r,volt_l,volt_r,vel_l,vel_r);
+		g_main_loop_flag = false;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -188,11 +339,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN;
-  hcan.Init.Prescaler = 16;
+  hcan.Init.Prescaler = 1;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_10TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_5TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;
@@ -459,6 +610,44 @@ static void MX_TIM6_Init(void)
 }
 
 /**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 19;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 7999;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -565,7 +754,11 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+int _write(int file, char *ptr, int len)
+{
+  HAL_UART_Transmit(&huart2,(uint8_t *)ptr,len,10);
+  return len;
+}
 /* USER CODE END 4 */
 
 /**
