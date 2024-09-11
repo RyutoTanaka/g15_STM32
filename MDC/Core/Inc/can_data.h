@@ -29,10 +29,15 @@ typedef struct {
 	uint8_t i_bat; // 0: 255:
 } PowerResult;
 
-void powerCommandSerialize(PowerCommand*, uint8_t*);
-bool powerCommandDeserialize(PowerCommand*, uint8_t*, uint8_t);
-void powerResultSerialize(PowerResult*, uint8_t*);
-bool powerResultDeserialize(PowerResult*, uint8_t*, uint8_t);
-uint8_t calculateChecksum(uint8_t*, uint8_t);
+// チェックサムを計算する関数
+uint8_t calculateChecksum(uint8_t* data, uint8_t length);
+
+void powerCommandSerialize(PowerCommand* data, uint8_t* buffer);
+
+bool powerCommandDeserialize(PowerCommand* data, uint8_t* buffer, uint8_t length);
+
+void powerResultSerialize(PowerResult* data, uint8_t* buffer);
+
+bool powerResultDeserialize(PowerResult* data, uint8_t* buffer, uint8_t length);
 
 #endif /* INC_CAN_DATA_H_ */

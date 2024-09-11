@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdbool.h>
+#include <can.h>
 
 /* USER CODE END Includes */
 
@@ -46,6 +48,7 @@ DMA_HandleTypeDef hdma_adc1;
 CAN_HandleTypeDef hcan;
 
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart2;
 
@@ -61,12 +64,61 @@ static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_CAN_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+enum state{
+	state_wait, // CAN通信待ち、ADC、CAN送信のみ実行
+	state_active, //通常状態
+	state_shutdown //5V電源OFF状態、非常停止ON->OFFで解除
+};
+
+typedef struct{
+	bool battery;
+	bool emergency;
+}Error;
+
+bool isNoError(Error e){
+	return (e.battery==false) && (e.emergency==false);
+}
+
+bool g_main_loop_flag = false;
+
+bool batteryErrorCheck(uint16_t,uint16_t);
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim == &htim6)
+	{
+		//mainloop
+		if(g_main_loop_flag){
+			//printf("Control cycle is slow\r\n");
+		}
+		else{
+			g_main_loop_flag = true;
+		}
+	}
+	if(htim == &htim7){
+		sendCanData();
+	}
+
+}
+
+// バッテリーの電流、電圧、非常停止スイッチの状態を確認する　異常があればtrueを返す
+bool batteryErrorCheck(uint16_t i_bat,uint16_t v_bat){
+	static const uint16_t i_bat_th = 30;
+	static const uint16_t v_bat_high_th = 16;
+	static const uint16_t v_bat_low_th = 12;
+	bool error = (i_bat > i_bat_th)
+			|| (v_bat > v_bat_high_th)
+			|| ((v_bat < v_bat_low_th));
+	return error;
+}
 
 /* USER CODE END 0 */
 
@@ -104,27 +156,96 @@ int main(void)
   MX_ADC1_Init();
   MX_CAN_Init();
   MX_TIM6_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
+  enum state state = state_wait;
+  Error error = {0};
+
+
+  //GPIO初期設定
+  HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, false);
+  HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, false);
+
   //ADCスタート
+  static uint16_t ADC_buff[2];
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC_buff, sizeof(ADC_buff) / sizeof(ADC_buff[0]));
+  hdma_adc1.Instance->CCR &= ~(DMA_IT_TC | DMA_IT_HT);
   HAL_Delay(100);
-  //エラーチェック
-  //電圧　電流　非常停止
-  //5vオン
-  HAL_Delay(1000);
+
+  //エラーチェック後５Vオン&CANスタート
+	while (batteryErrorCheck(ADC_buff[0], ADC_buff[1]) == true
+			|| HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin)) {
+		HAL_Delay(1000);
+	}
+  HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
+  HAL_Delay(100);
+
   //CANスタート
+  canInit(&hcan);
+  size_t can_timeout_cnt = 0;
+
+  //timerスタート
+  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim7);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
-  	//mainloop wait
-  	//CANデータ確認
-  	//ADCデータ確認
-  	//アウトプット
-  	//
-  	//CANデータ返却
+		//mainloop wait
+		while(g_main_loop_flag == false){}
+		//ADCデータ確認＆CAN送信
+		PowerResult result;
+		result.i_bat = ADC_buff[0];
+		result.v_bat = ADC_buff[1];
+		setCanData(&result);
+
+		error.battery = batteryErrorCheck(result.i_bat, result.v_bat);
+		error.emergency = HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin);
+
+		switch(state){
+		case state_shutdown:
+			static bool prev_emerg_sw = false;
+			HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, false);
+			HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, false);
+			if(prev_emerg_sw == true && error.emergency == false){
+				state = state_wait;
+			}
+			prev_emerg_sw = error.emergency;
+			break;
+		case state_wait:
+			HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, false);
+			HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
+			if(isCanUpdated()){
+				state = state_active;
+			}
+			break;
+		case state_active:
+			//CANデータ確認
+			PowerCommand command;
+			getCanData(&command);
+			if(isCanUpdated()==false) can_timeout_cnt++;
+			else can_timeout_cnt=0;
+
+			// state set
+			if (command.power_off == true && command.motor_output == false) {
+				state = state_shutdown;
+			} else if (can_timeout_cnt > 5) {
+				state = state_wait;
+			}
+
+			HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
+			if(isNoError(error)&&command.motor_output==true){
+				HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
+			}else{
+				HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, false);
+			}
+			break;
+		}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -191,7 +312,7 @@ static void MX_ADC1_Init(void)
   */
   hadc1.Instance = ADC1;
   hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-  hadc1.Init.Resolution = ADC_RESOLUTION_10B;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
   hadc1.Init.ContinuousConvMode = ENABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
@@ -319,6 +440,44 @@ static void MX_TIM6_Init(void)
 }
 
 /**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 0;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 65535;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -389,7 +548,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, state_LED_Pin|emergency_LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, dcdc_Pin|relay_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, jetson_power_Pin|relay_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : emergency_switch_Pin */
   GPIO_InitStruct.Pin = emergency_switch_Pin;
@@ -404,8 +563,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : dcdc_Pin relay_Pin */
-  GPIO_InitStruct.Pin = dcdc_Pin|relay_Pin;
+  /*Configure GPIO pins : jetson_power_Pin relay_Pin */
+  GPIO_InitStruct.Pin = jetson_power_Pin|relay_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

@@ -77,8 +77,8 @@ void Error_Handler(void);
 #define SWCLK_GPIO_Port GPIOA
 #define VCP_RX_Pin GPIO_PIN_15
 #define VCP_RX_GPIO_Port GPIOA
-#define dcdc_Pin GPIO_PIN_4
-#define dcdc_GPIO_Port GPIOB
+#define jetson_power_Pin GPIO_PIN_4
+#define jetson_power_GPIO_Port GPIOB
 #define relay_Pin GPIO_PIN_6
 #define relay_GPIO_Port GPIOB
 

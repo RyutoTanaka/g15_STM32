@@ -11,7 +11,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "../../../MDC/Core/Inc/can_data.h"
+#include "can_data.h"
 #include "stm32f3xx_hal_can.h"
 
 static uint8_t g_power_tx_data[POWER_COMMAND_BUFFER_SIZE];
@@ -41,22 +41,17 @@ void canInit(CAN_HandleTypeDef *hcan){
 	HAL_CAN_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
 }
 
-void getPowerCanData(PowerCommand* cmd){
-	powerCommandDeserialize(cmd, g_power_rx_data, sizeof(g_power_rx_data));
+void getPowerCanData(PowerResult* res){
+	g_power_updated = false;
+	powerResultDeserialize(res, g_power_rx_data, sizeof(g_power_rx_data));
 }
 
-void setPowerCanData(PowerResult* res){
-	powerResultSerialize(res, g_power_tx_data);
+void setPowerCanData(PowerCommand* cmd){
+	powerCommandSerialize(cmd, g_power_tx_data);
 }
 
 bool isPowerUpdated(){
-	if(g_power_updated) {
-		g_power_updated = false;
-		return true;
-	}
-	else {
-		return false;
-	}
+		return g_power_updated;
 }
 
 void sendPowerCanData(){

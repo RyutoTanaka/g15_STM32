@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
+#include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -93,14 +94,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		static size_t spi_timeout_cnt=0;
 		if(isSpiUpdated()) spi_timeout_cnt = 0;
 		if(spi_timeout_cnt++ >= 5) {
-			g_control = false;
-			printf("SPI TIMEOUT ERROR\r\n");
+			//g_control = false;
+			//printf("SPI TIMEOUT ERROR\r\n");//todo
 		}
 		static size_t power_timeout_cnt=0;
 		if(isPowerUpdated()) power_timeout_cnt = 0;
 		if(power_timeout_cnt++ >= 5) {
-			g_control = false;
-			printf("POWER TIMEOUT ERROR\r\n");
+			//g_control = false;
+			//printf("POWER TIMEOUT ERROR\r\n");//todo
 		}
 		if(g_main_loop_flag){
 			printf("Control cycle is slow\r\n");
@@ -167,6 +168,7 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
 	HAL_TIM_Base_Start_IT(&htim6);
+	HAL_TIM_Base_Start_IT(&htim7);
 	HAL_Delay(100);
   /* USER CODE END 2 */
 
@@ -183,29 +185,46 @@ int main(void)
 		//CAN
 		setPowerCanData(&command.power_command);
 
+		//todo
+		command.vel_l = 1.0f;
+		command.vel_r = 0.0f;
+
+
 
 
 		//encoder
 		static int last_cnt_l;
 		static int last_cnt_r;
-		int16_t cnt_l = TIM2->CNT;
-		int16_t cnt_r = TIM3->CNT;
-		if (last_cnt_l > 0 && cnt_l < 0 && (last_cnt_l - cnt_l) > 0)
-			last_cnt_l -= 0x10000; //オーバーフロー
-		else if (last_cnt_l < 0 && cnt_l > 0 && (last_cnt_l - cnt_l) < 0)
-			last_cnt_l += 0x10000; //アンダーフロー
-		if (last_cnt_r > 0 && cnt_r < 0 && (last_cnt_r - cnt_r) > 0)
-			last_cnt_r -= 0x10000; //オーバーフロー
-		else if (last_cnt_r < 0 && cnt_r > 0 && (last_cnt_r - cnt_r) < 0)
-			last_cnt_r += 0x10000; //アンダーフロー
-		HAL_TIM_Encoder_Start( &htim2, TIM_CHANNEL_ALL );
-		HAL_TIM_Encoder_Start( &htim3, TIM_CHANNEL_ALL );
-		float vel_l = ((float) ((int) cnt_l) * ENC_TO_TIRE * RATE) / RESOLUTION;
-		float vel_r = ((float) ((int) cnt_r) * ENC_TO_TIRE * RATE) / RESOLUTION;
+
+		int cnt_l = (int16_t)TIM2->CNT;
+		int cnt_r = (int16_t)TIM3->CNT;
+		if(abs(last_cnt_l - cnt_l) > 0x8000){
+			if (last_cnt_l > 0 && cnt_l < 0 && (last_cnt_l - cnt_l) > 0){
+				last_cnt_l -= 0x10000; //オーバーフロー
+			}
+			else if (last_cnt_l < 0 && cnt_l > 0 && (last_cnt_l - cnt_l) < 0){
+				last_cnt_l += 0x10000; //アンダーフロー
+			}
+		}
+		if(abs(last_cnt_r - cnt_r) > 0x8000){
+			if (last_cnt_r > 0 && cnt_r < 0 && (last_cnt_r - cnt_r) > 0){
+				last_cnt_r -= 0x10000; //オーバーフロー
+			}
+			else if (last_cnt_r < 0 && cnt_r > 0 && (last_cnt_r - cnt_r) < 0){
+				last_cnt_r += 0x10000; //アンダーフロー
+			}
+		}
+		float vel_l = ((float) (cnt_l - last_cnt_l) * ENC_TO_TIRE * RATE) / RESOLUTION;
+		float vel_r = -((float) (cnt_r - last_cnt_r) * ENC_TO_TIRE * RATE) / RESOLUTION;
+		last_cnt_l = cnt_l;
+		last_cnt_r = cnt_r;
+
 
 		//PI control
 		float volt_l;
 		float volt_r;
+		//todo
+		g_control = true;
 		if (g_control) {
 			float e_l = command.vel_l - vel_l;
 			float e_r = command.vel_r - vel_r;
@@ -251,7 +270,7 @@ int main(void)
 			pwm_l = (uint32_t)(MAX_DUTY_CNT * (fabsf(volt_l)/12.0f));
 			pwm_r = (uint32_t)(MAX_DUTY_CNT * (fabsf(volt_r)/12.0f));
 			dir_l = (volt_l > 0.0f) ? true : false;
-			dir_r = (volt_r > 0.0f) ? true : false;
+			dir_r = (volt_r < 0.0f) ? true : false;
 		}
 		else{
 			pwm_l = 0;
@@ -271,7 +290,7 @@ int main(void)
 		result.cnt_l = TIM2->CNT;
 		result.cnt_r = TIM3->CNT;
 		setSpiData(&result);
-		//printf("cmd:(%f,%f) volt:(%f,%f) vel:(%f,%f)\r\n",cmd_vel_l,cmd_vel_r,volt_l,volt_r,vel_l,vel_r);
+		printf("vel:(%f,%f), volt:(%f,%f)\r\n",vel_l,vel_r,volt_l,volt_r);
 		g_main_loop_flag = false;
     /* USER CODE END WHILE */
 

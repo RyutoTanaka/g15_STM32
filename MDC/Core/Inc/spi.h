@@ -28,11 +28,11 @@ void spiInit(SPI_HandleTypeDef *hspi){
 }
 
 void getSpiData(Command* cmd){
-	commandSerialize(cmd, g_spi_rx_data);
+	commandDeserialize(cmd, g_spi_rx_data, sizeof(g_spi_rx_data));
 }
 
 void setSpiData(Result* res){
-	resultDeserialize(res, g_spi_tx_data, sizeof(g_spi_tx_data));
+	resultSerialize(res, g_spi_tx_data);
 }
 
 bool isSpiUpdated(){
