@@ -43,7 +43,7 @@ void canInit(CAN_HandleTypeDef *hcan){
 
 void getPowerCanData(PowerResult* res){
 	g_power_updated = false;
-	powerResultDeserialize(res, g_power_rx_data, sizeof(g_power_rx_data));
+	powerResultDeserialize(res, g_power_rx_data);
 }
 
 void setPowerCanData(PowerCommand* cmd){

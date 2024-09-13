@@ -1,5 +1,4 @@
-../Core/Src/can_data.c:12:6:powerCommandSerialize	16	static
-../Core/Src/can_data.c:16:6:powerCommandDeserialize	32	static
-../Core/Src/can_data.c:23:6:powerResultSerialize	24	static
-../Core/Src/can_data.c:36:6:powerResultDeserialize	32	static
-../Core/Src/can_data.c:49:9:calculateChecksum	24	static
+../Core/Src/can_data.c:10:6:powerCommandSerialize	16	static
+../Core/Src/can_data.c:14:6:powerCommandDeserialize	16	static
+../Core/Src/can_data.c:19:6:powerResultSerialize	16	static
+../Core/Src/can_data.c:23:6:powerResultDeserialize	16	static

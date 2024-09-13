@@ -10,12 +10,13 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #define MDC_CAN_ID 0x100
 #define POWER_CAN_ID 0x200
 
-#define POWER_COMMAND_BUFFER_SIZE 2
-#define POWER_RESULT_BUFFER_SIZE 4
+#define POWER_COMMAND_BUFFER_SIZE 1
+#define POWER_RESULT_BUFFER_SIZE 2
 
 typedef struct{
 	bool motor_output;
@@ -23,21 +24,14 @@ typedef struct{
 } PowerCommand;
 
 typedef struct {
-	bool is_motor_output;  //true : motor power is suppled
-	bool is_not_emergency; //true : not emergency
 	uint8_t v_bat; // 0: 255:
 	uint8_t i_bat; // 0: 255:
 } PowerResult;
 
-// チェックサムを計算する関数
-uint8_t calculateChecksum(uint8_t* data, uint8_t length);
 
 void powerCommandSerialize(PowerCommand* data, uint8_t* buffer);
-
-bool powerCommandDeserialize(PowerCommand* data, uint8_t* buffer, uint8_t length);
-
+void powerCommandDeserialize(PowerCommand* data, uint8_t* buffer);
 void powerResultSerialize(PowerResult* data, uint8_t* buffer);
-
-bool powerResultDeserialize(PowerResult* data, uint8_t* buffer, uint8_t length);
+void powerResultDeserialize(PowerResult* data, uint8_t* buffer);
 
 #endif /* INC_CAN_DATA_H_ */

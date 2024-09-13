@@ -94,8 +94,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		static size_t spi_timeout_cnt=0;
 		if(isSpiUpdated()) spi_timeout_cnt = 0;
 		if(spi_timeout_cnt++ >= 5) {
-			//g_control = false;
-			//printf("SPI TIMEOUT ERROR\r\n");//todo
+			g_control = false;
+			printf("SPI TIMEOUT ERROR\r\n");
 		}
 		static size_t power_timeout_cnt=0;
 		if(isPowerUpdated()) power_timeout_cnt = 0;
@@ -188,9 +188,6 @@ int main(void)
 		//todo
 		command.vel_l = 1.0f;
 		command.vel_r = 0.0f;
-
-
-
 
 		//encoder
 		static int last_cnt_l;

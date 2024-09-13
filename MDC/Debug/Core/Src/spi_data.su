@@ -1,6 +1,5 @@
-../Core/Src/spi_data.c:13:6:commandSerialize	24	static
-../Core/Src/spi_data.c:28:6:commandDeserialize	32	static
-../Core/Src/spi_data.c:38:6:resultSerialize	24	static
-../Core/Src/spi_data.c:57:6:resultDeserialize	32	static
-../Core/Src/spi_data.c:70:10:float32ToFloat16	32	static
-../Core/Src/spi_data.c:93:7:float16ToFloat32	32	static
+../Core/Src/spi_data.c:14:9:calculateChecksum	24	static
+../Core/Src/spi_data.c:23:6:commandSerialize	24	static
+../Core/Src/spi_data.c:35:6:commandDeserialize	24	static
+../Core/Src/spi_data.c:46:6:resultSerialize	24	static
+../Core/Src/spi_data.c:62:6:resultDeserialize	24	static

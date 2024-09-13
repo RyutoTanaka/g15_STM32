@@ -15,8 +15,8 @@
 
 #include "stm32f3xx_hal_spi.h"
 
-static uint8_t g_spi_tx_data[SPI_RESULT_BUFFER_SIZE];
-static uint8_t g_spi_rx_data[SPI_COMMAND_BUFFER_SIZE];
+static uint8_t g_spi_tx_data[SPI_RESULT_BUFFER_SIZE] = {0};
+static uint8_t g_spi_rx_data[SPI_COMMAND_BUFFER_SIZE] = {0};
 
 static SPI_HandleTypeDef* g_hspi;
 
@@ -28,7 +28,8 @@ void spiInit(SPI_HandleTypeDef *hspi){
 }
 
 void getSpiData(Command* cmd){
-	commandDeserialize(cmd, g_spi_rx_data, sizeof(g_spi_rx_data));
+	g_spi_updated = false;
+	commandDeserialize(cmd, g_spi_rx_data);
 }
 
 void setSpiData(Result* res){
@@ -36,14 +37,7 @@ void setSpiData(Result* res){
 }
 
 bool isSpiUpdated(){
-	if(g_spi_updated) {
-		g_spi_updated = false;
-		return true;
-	}
-	else {
-		return false;
-	}
-
+	return g_spi_updated;
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
