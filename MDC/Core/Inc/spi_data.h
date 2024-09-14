@@ -8,8 +8,7 @@
 #ifndef INC_SPI_DATA_H_
 #define INC_SPI_DATA_H_
 
-#define SPI_COMMAND_BUFFER_SIZE 13
-#define SPI_RESULT_BUFFER_SIZE 13
+#define SPI_BUFFER_SIZE 15
 
 #include <stdbool.h>
 #include <stdint.h>

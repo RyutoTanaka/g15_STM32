@@ -15,8 +15,8 @@
 
 #include "stm32f3xx_hal_spi.h"
 
-static uint8_t g_spi_tx_data[SPI_RESULT_BUFFER_SIZE] = {0};
-static uint8_t g_spi_rx_data[SPI_COMMAND_BUFFER_SIZE] = {0};
+static uint8_t g_spi_tx_data[SPI_BUFFER_SIZE] = {0};
+static uint8_t g_spi_rx_data[SPI_BUFFER_SIZE] = {0};
 
 static SPI_HandleTypeDef* g_hspi;
 
@@ -47,7 +47,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
 	g_spi_updated = true;
-	uint8_t tx_buffer[SPI_RESULT_BUFFER_SIZE] = {0};
+	uint8_t tx_buffer[SPI_BUFFER_SIZE] = {0};
 	HAL_SPI_TransmitReceive_DMA(hspi, tx_buffer, g_spi_rx_data, sizeof(g_spi_rx_data));
 }
 
