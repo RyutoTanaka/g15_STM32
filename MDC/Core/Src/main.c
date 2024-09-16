@@ -185,10 +185,6 @@ int main(void)
 		//CAN
 		setPowerCanData(&command.power_command);
 
-		//todo
-		command.vel_l = 1.0f;
-		command.vel_r = 0.0f;
-
 		//encoder
 		static int last_cnt_l;
 		static int last_cnt_r;
@@ -282,12 +278,19 @@ int main(void)
 		//return SPI&CAN
 		Result result;
 		getPowerCanData(&result.power_result);
-		result.vel_l = vel_l;
-		result.vel_r = vel_r;
-		result.cnt_l = TIM2->CNT;
-		result.cnt_r = TIM3->CNT;
+		result.power_result.i_bat = 0xAA;
+		result.power_result.v_bat = 0xBB;
+		result.vel_l = 1.0f;
+		result.vel_r = -0.1f;
+		result.cnt_l = 0xCCCC;
+		result.cnt_r = 0xDDDD;
+		//todo
+//		result.vel_l = vel_l;
+//		result.vel_r = vel_r;
+//		result.cnt_l = TIM2->CNT;
+//		result.cnt_r = TIM3->CNT;
 		setSpiData(&result);
-		printf("vel:(%f,%f), volt:(%f,%f)\r\n",vel_l,vel_r,volt_l,volt_r);
+		//printf("vel:(%f,%f),cmd:(%f,%f), volt:(%f,%f)\r\n",vel_l,vel_r,command.vel_l,command.vel_r,volt_l,volt_r);
 		g_main_loop_flag = false;
     /* USER CODE END WHILE */
 

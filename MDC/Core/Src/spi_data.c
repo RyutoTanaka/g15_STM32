@@ -68,7 +68,7 @@ bool resultDeserialize(Result* data, uint8_t* buffer){
 	length += sizeof(float);
 	memcpy(&data->cnt_l,buffer+length,sizeof(uint16_t));
 	length += sizeof(uint16_t);
-	memcpy(&data->cnt_l,buffer+length,sizeof(uint16_t));
+	memcpy(&data->cnt_r,buffer+length,sizeof(uint16_t));
 	length += sizeof(uint16_t);
 	memcpy(&data->check_sum,buffer+length,sizeof(uint8_t));
 	return calculateChecksum(buffer, length) == data->check_sum;

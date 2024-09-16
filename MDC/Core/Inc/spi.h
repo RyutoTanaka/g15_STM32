@@ -47,8 +47,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
 	g_spi_updated = true;
-	uint8_t tx_buffer[SPI_BUFFER_SIZE] = {0};
-	HAL_SPI_TransmitReceive_DMA(hspi, tx_buffer, g_spi_rx_data, sizeof(g_spi_rx_data));
+	HAL_SPI_TransmitReceive_DMA(hspi,g_spi_tx_data, g_spi_rx_data, sizeof(g_spi_rx_data));
 }
 
 #endif /* INC_SPI_H_ */
