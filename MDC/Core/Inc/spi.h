@@ -42,11 +42,6 @@ bool isSpiUpdated(){
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
 	g_spi_updated = true;
-	HAL_SPI_Transmit_DMA(hspi, g_spi_tx_data, sizeof(g_spi_tx_data));
-}
-
-void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
-	g_spi_updated = true;
 	HAL_SPI_TransmitReceive_DMA(hspi,g_spi_tx_data, g_spi_rx_data, sizeof(g_spi_rx_data));
 }
 

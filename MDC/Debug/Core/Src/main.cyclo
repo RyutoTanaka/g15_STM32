@@ -3,7 +3,6 @@
 ../Core/Inc/spi.h:35:6:setSpiData	1
 ../Core/Inc/spi.h:39:6:isSpiUpdated	1
 ../Core/Inc/spi.h:43:6:HAL_SPI_TxRxCpltCallback	1
-../Core/Inc/spi.h:48:6:HAL_SPI_TxCpltCallback	1
 ../Core/Inc/can.h:26:6:canInit	1
 ../Core/Inc/can.h:44:6:getPowerCanData	1
 ../Core/Inc/can.h:49:6:setPowerCanData	1
