@@ -181,9 +181,12 @@ int main(void)
 
 		//SPI
 		Command command;
+		Result result;
 		getSpiData(&command);
+
 		//CAN
 		setPowerCanData(&command.power_command);
+		getPowerCanData(&result.power_result);
 
 		//encoder
 		static int last_cnt_l;
@@ -212,12 +215,47 @@ int main(void)
 		last_cnt_l = cnt_l;
 		last_cnt_r = cnt_r;
 
+		//error check //todo 値決定
+		if(abs(command.vel_l) > 5.0f) {
+			g_control = false;
+			printf("LEFT_COMMAND_ERROR\r\n");
+		}
+		if(abs(command.vel_r) > 5.0f) {
+			g_control = false;
+			printf("RIGHT_COMMAND_ERROR\r\n");
+		}
+		if(abs(pid.integral_l) > 100.0f){
+			g_control = false;
+			printf("LEFT_PID_ERROR\r\n");
+		}
+		if(abs(pid.integral_r) > 100.0f){
+			g_control = false;
+			printf("RIGHT_PID_ERROR\r\n");
+		}
+		if(abs(vel_l) > 5.0f){
+			g_control = false;
+			printf("LEFT_SPEED_ERROR\r\n");
+		}
+		if(abs(vel_r) > 5.0f){
+			g_control = false;
+			printf("RIGHT_SPEED_ERROR\r\n");
+		}
+		if(result.power_result.i_bat > 15){
+			g_control = false;
+			printf("OVER_CURRENT_ERROR\r\n");
+		}
+		if(result.power_result.v_bat > 100){
+			g_control = false;
+			printf("OVER_VOLTAGE_ERROR\r\n");
+		}
+		if(result.power_result.v_bat < 50){
+			g_control = false;
+			printf("UNDER_VOLTAGE_ERROR\r\n");
+		}
 
 		//PI control
 		float volt_l;
 		float volt_r;
-		//todo
-		g_control = true;
 		if (g_control) {
 			float e_l = command.vel_l - vel_l;
 			float e_r = command.vel_r - vel_r;
@@ -239,14 +277,18 @@ int main(void)
 
 		}
 		else{
-			// error
+			// error 解除
 			// 指令速度異常
-			// PID制御異常
+			// PID制御異常（要検討）
 			// タイヤ速度異常
 			// SPI通信異常
 			// CAN通信異常
-
-
+			if ((abs(command.vel_l) < 5.0f) && (abs(command.vel_r) < 5.0f)
+					&& (abs(vel_l) < 5.0f) && (abs(vel_r) < 5.0f)
+					&& (result.power_result.i_bat < 15)
+					&& (result.power_result.v_bat < 50)) {
+				g_control = true;
+			}
 			pid.integral_l = 0.0f;
 			pid.integral_r = 0.0f;
 			volt_l = 0.0f;
@@ -275,21 +317,15 @@ int main(void)
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm_r);
 		HAL_GPIO_WritePin(DIR_L_GPIO_Port, DIR_L_Pin, dir_l);
 		HAL_GPIO_WritePin(DIR_R_GPIO_Port, DIR_R_Pin, dir_r);
-		//return SPI&CAN
-		Result result;
-		getPowerCanData(&result.power_result);
-		result.power_result.i_bat = 0xAA;
-		result.power_result.v_bat = 0xBB;
-		result.vel_l = 1.0f;
-		result.vel_r = -0.1f;
-		result.cnt_l = 0xCCCC;
-		result.cnt_r = 0xDDDD;
-		//todo
-//		result.vel_l = vel_l;
-//		result.vel_r = vel_r;
-//		result.cnt_l = TIM2->CNT;
-//		result.cnt_r = TIM3->CNT;
+
+		//SPI
+		result.vel_l = vel_l;
+		result.vel_r = vel_r;
+		result.cnt_l = TIM2->CNT;
+		result.cnt_r = TIM3->CNT;
 		setSpiData(&result);
+
+		//other
 		//printf("vel:(%f,%f),cmd:(%f,%f), volt:(%f,%f)\r\n",vel_l,vel_r,command.vel_l,command.vel_r,volt_l,volt_r);
 		g_main_loop_flag = false;
     /* USER CODE END WHILE */
