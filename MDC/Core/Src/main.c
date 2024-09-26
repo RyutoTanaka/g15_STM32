@@ -91,18 +91,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim == &htim6)
 	{
-		static size_t spi_timeout_cnt=0;
-		if(isSpiUpdated()) spi_timeout_cnt = 0;
-		if(spi_timeout_cnt++ >= 5) {
-			g_control = false;
-			printf("SPI TIMEOUT ERROR\r\n");
-		}
-		static size_t power_timeout_cnt=0;
-		if(isPowerUpdated()) power_timeout_cnt = 0;
-		if(power_timeout_cnt++ >= 5) {
-			//g_control = false;
-			//printf("POWER TIMEOUT ERROR\r\n");//todo
-		}
 		if(g_main_loop_flag){
 			printf("Control cycle is slow\r\n");
 		}
@@ -174,17 +162,33 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	size_t spi_timeout_cnt=0;
+	size_t power_timeout_cnt=0;
   while (1)
   {
   	//wait main_loop_flag
 		while(g_main_loop_flag == false){}
 
 		//SPI
-		Command command;
-		Result result;
+		Command command = {0};
+		Result result = {0};
+		if(isSpiUpdated()){
+			spi_timeout_cnt = 0;
+		}
+		if(spi_timeout_cnt++ >= 5) {
+			g_control = false;
+			printf("SPI TIMEOUT ERROR %d \r\n",spi_timeout_cnt);
+		}
 		getSpiData(&command);
 
 		//CAN
+		if(isPowerUpdated()) {
+			power_timeout_cnt = 0;
+		}
+		if(power_timeout_cnt++ >= 5) {
+			g_control = false;
+			printf("POWER TIMEOUT ERROR %d \r\n",power_timeout_cnt);
+		}
 		setPowerCanData(&command.power_command);
 		getPowerCanData(&result.power_result);
 
@@ -218,39 +222,47 @@ int main(void)
 		//error check //todo 値決定
 		if(abs(command.vel_l) > 5.0f) {
 			g_control = false;
-			printf("LEFT_COMMAND_ERROR\r\n");
+			printf("LEFT_COMMAND_ERROR : %f \r\n",command.vel_l);
 		}
 		if(abs(command.vel_r) > 5.0f) {
 			g_control = false;
-			printf("RIGHT_COMMAND_ERROR\r\n");
+			printf("RIGHT_COMMAND_ERROR : %f \r\n",command.vel_r);
 		}
 		if(abs(pid.integral_l) > 100.0f){
 			g_control = false;
-			printf("LEFT_PID_ERROR\r\n");
+			printf("LEFT_PID_ERROR : %f \r\n",pid.integral_l);
 		}
 		if(abs(pid.integral_r) > 100.0f){
 			g_control = false;
-			printf("RIGHT_PID_ERROR\r\n");
+			printf("RIGHT_PID_ERROR : %f \r\n",pid.integral_r);
 		}
 		if(abs(vel_l) > 5.0f){
 			g_control = false;
-			printf("LEFT_SPEED_ERROR\r\n");
+			printf("LEFT_SPEED_ERROR : %f \r\n",vel_l);
 		}
 		if(abs(vel_r) > 5.0f){
 			g_control = false;
-			printf("RIGHT_SPEED_ERROR\r\n");
+			printf("RIGHT_SPEED_ERROR : %f \r\n",vel_r);
 		}
-		if(result.power_result.i_bat > 15){
+		if(result.power_result.i_bat > 40){
 			g_control = false;
-			printf("OVER_CURRENT_ERROR\r\n");
+			printf("OVER_CURRENT_ERROR : %d \r\n",result.power_result.i_bat);
 		}
-		if(result.power_result.v_bat > 100){
+		if(result.power_result.v_bat > 400){
 			g_control = false;
-			printf("OVER_VOLTAGE_ERROR\r\n");
+			printf("OVER_VOLTAGE_ERROR : %d \r\n",result.power_result.v_bat);
 		}
-		if(result.power_result.v_bat < 50){
+		if(result.power_result.v_bat < 200){
 			g_control = false;
-			printf("UNDER_VOLTAGE_ERROR\r\n");
+			printf("UNDER_VOLTAGE_ERROR : %d \r\n",result.power_result.v_bat);
+		}
+		if(result.power_result.emergency == true){
+			g_control = false;
+			printf("EMERGENCY SWITCH IS PUSHED \r\n");
+		}
+		if(result.power_result.motor_output == false){
+			g_control = false;
+			printf("MOTOR DRIVER IS NOT ACTIVE \r\n");
 		}
 
 		//PI control
@@ -274,6 +286,7 @@ int main(void)
 //			volt_r = fmaxf(fminf(volt_r,12.0f),-12.0f);
 			volt_l = fmaxf(fminf(volt_l, 6.0f), -6.0f);
 			volt_r = fmaxf(fminf(volt_r, 6.0f), -6.0f);
+			printf("%d,vel:(%f,%f),cmd:(%f,%f), volt:(%f,%f)\r\n",g_control,vel_l,vel_r,command.vel_l,command.vel_r,volt_l,volt_r);
 
 		}
 		else{
@@ -285,8 +298,8 @@ int main(void)
 			// CAN通信異常
 			if ((abs(command.vel_l) < 5.0f) && (abs(command.vel_r) < 5.0f)
 					&& (abs(vel_l) < 5.0f) && (abs(vel_r) < 5.0f)
-					&& (result.power_result.i_bat < 15)
-					&& (result.power_result.v_bat < 50)) {
+					&& (result.power_result.i_bat < 40)
+					&& (result.power_result.v_bat < 400)) {
 				g_control = true;
 			}
 			pid.integral_l = 0.0f;
@@ -326,7 +339,7 @@ int main(void)
 		setSpiData(&result);
 
 		//other
-		//printf("vel:(%f,%f),cmd:(%f,%f), volt:(%f,%f)\r\n",vel_l,vel_r,command.vel_l,command.vel_r,volt_l,volt_r);
+
 		g_main_loop_flag = false;
     /* USER CODE END WHILE */
 
@@ -394,11 +407,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN;
-  hcan.Init.Prescaler = 1;
+  hcan.Init.Prescaler = 3;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_10TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_5TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_15TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_4TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;

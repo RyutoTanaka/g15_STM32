@@ -10,6 +10,8 @@
 
 #include <string.h>
 #include <stdbool.h>
+//todo
+#include <stdio.h>
 
 #include "spi_data.h"
 

@@ -58,6 +58,7 @@ void SysTick_Handler(void);
 void DMA1_Channel1_IRQHandler(void);
 void CAN_RX0_IRQHandler(void);
 void TIM6_DAC1_IRQHandler(void);
+void TIM7_DAC2_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */

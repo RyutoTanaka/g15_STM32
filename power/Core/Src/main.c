@@ -23,7 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include <can.h>
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -97,7 +97,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	{
 		//mainloop
 		if(g_main_loop_flag){
-			//printf("Control cycle is slow\r\n");
+			printf("Control cycle is slow\r\n");
 		}
 		else{
 			g_main_loop_flag = true;
@@ -111,12 +111,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 // バッテリーの電流、電圧、非常停止スイッチの状態を確認する　異常があればtrueを返す
 bool batteryErrorCheck(uint16_t i_bat,uint16_t v_bat){
-	static const uint16_t i_bat_th = 30;
-	static const uint16_t v_bat_high_th = 16;
-	static const uint16_t v_bat_low_th = 12;
+	static const uint16_t i_bat_th = 700;
+	static const uint16_t v_bat_high_th = 16.0f/0.0039f;
+	static const uint16_t v_bat_low_th = 12.0f/0.0039f;
 	bool error = (i_bat > i_bat_th)
 			|| (v_bat > v_bat_high_th)
-			|| ((v_bat < v_bat_low_th));
+			|| (v_bat < v_bat_low_th);
 	return error;
 }
 
@@ -130,7 +130,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	setbuf(stdout, NULL);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -200,11 +200,11 @@ int main(void)
 		while(g_main_loop_flag == false){}
 		//ADCデータ確認＆CAN送信
 		PowerResult result;
-		result.i_bat = ADC_buff[0];
-		result.v_bat = ADC_buff[1];
+		result.i_bat = ADC_buff[0]>>4;
+		result.v_bat = ADC_buff[1]>>4;
 		setCanData(&result);
 
-		error.battery = batteryErrorCheck(result.i_bat, result.v_bat);
+		error.battery = batteryErrorCheck(ADC_buff[0], ADC_buff[1]);
 		error.emergency = HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin);
 
 		switch(state){
@@ -221,16 +221,16 @@ int main(void)
 			HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, false);
 			HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
 			if(isCanUpdated()){
+				can_timeout_cnt = 0;
 				state = state_active;
 			}
 			break;
 		case state_active:
 			//CANデータ確認
 			PowerCommand command;
-			getCanData(&command);
 			if(isCanUpdated()==false) can_timeout_cnt++;
 			else can_timeout_cnt=0;
-
+			getCanData(&command);
 			// state set
 			if (command.power_off == true && command.motor_output == false) {
 				state = state_shutdown;
@@ -240,12 +240,16 @@ int main(void)
 
 			HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
 			if(isNoError(error)&&command.motor_output==true){
-				HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
+				printf("motor_on : \r\n");
+				HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, true);
 			}else{
-				HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, false);
+				printf("motor_off : \r\n");
+				HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, false);
 			}
 			break;
 		}
+		//printf("%d,%d,%d,%d\r\n",state,ADC_buff[0],ADC_buff[1],HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin));
+    g_main_loop_flag = false;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -380,11 +384,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN;
-  hcan.Init.Prescaler = 1;
+  hcan.Init.Prescaler = 3;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_10TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_5TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_15TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_4TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;
@@ -419,9 +423,9 @@ static void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 0;
+  htim6.Init.Prescaler = 19;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 65535;
+  htim6.Init.Period = 7999;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -457,9 +461,9 @@ static void MX_TIM7_Init(void)
 
   /* USER CODE END TIM7_Init 1 */
   htim7.Instance = TIM7;
-  htim7.Init.Prescaler = 0;
+  htim7.Init.Prescaler = 19;
   htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim7.Init.Period = 65535;
+  htim7.Init.Period = 7999;
   htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
   {
@@ -575,7 +579,11 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+int _write(int file, char *ptr, int len)
+{
+  HAL_UART_Transmit(&huart2,(uint8_t *)ptr,len,10);
+  return len;
+}
 /* USER CODE END 4 */
 
 /**
