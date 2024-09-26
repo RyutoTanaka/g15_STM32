@@ -1700,7 +1700,7 @@ int main(void)
 		//encoder
 		static int last_cnt_l;
 		static int last_cnt_r;
-
+		// todo
 		int cnt_l = (int16_t)TIM2->CNT;
  8001062:	f04f 4380 	mov.w	r3, #1073741824	@ 0x40000000
  8001066:	6a5b      	ldr	r3, [r3, #36]	@ 0x24
@@ -1711,6 +1711,7 @@ int main(void)
  800106e:	6a5b      	ldr	r3, [r3, #36]	@ 0x24
  8001070:	b21b      	sxth	r3, r3
  8001072:	64fb      	str	r3, [r7, #76]	@ 0x4c
+
 		if(abs(last_cnt_l - cnt_l) > 0x8000){
  8001074:	4b34      	ldr	r3, [pc, #208]	@ (8001148 <main+0x210>)
  8001076:	681a      	ldr	r2, [r3, #0]
@@ -2032,9 +2033,9 @@ int main(void)
  8001364:	4852      	ldr	r0, [pc, #328]	@ (80014b0 <main+0x578>)
  8001366:	f007 f89f 	bl	80084a8 <iprintf>
 		}
-		if(result.power_result.i_bat > 40){
+		if(result.power_result.i_bat > 80){
  800136a:	7cfb      	ldrb	r3, [r7, #19]
- 800136c:	2b28      	cmp	r3, #40	@ 0x28
+ 800136c:	2b50      	cmp	r3, #80	@ 0x50
  800136e:	d907      	bls.n	8001380 <main+0x448>
 			g_control = false;
  8001370:	4b48      	ldr	r3, [pc, #288]	@ (8001494 <main+0x55c>)
@@ -3024,9 +3025,9 @@ static void MX_TIM2_Init(void)
  8001af0:	4b1d      	ldr	r3, [pc, #116]	@ (8001b68 <MX_TIM2_Init+0xa4>)
  8001af2:	2200      	movs	r2, #0
  8001af4:	609a      	str	r2, [r3, #8]
-  htim2.Init.Period = 65525;
+  htim2.Init.Period = 65535;
  8001af6:	4b1c      	ldr	r3, [pc, #112]	@ (8001b68 <MX_TIM2_Init+0xa4>)
- 8001af8:	f64f 72f5 	movw	r2, #65525	@ 0xfff5
+ 8001af8:	f64f 72ff 	movw	r2, #65535	@ 0xffff
  8001afc:	60da      	str	r2, [r3, #12]
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
  8001afe:	4b1a      	ldr	r3, [pc, #104]	@ (8001b68 <MX_TIM2_Init+0xa4>)
@@ -3159,8 +3160,8 @@ static void MX_TIM3_Init(void)
  8001baa:	4b19      	ldr	r3, [pc, #100]	@ (8001c10 <MX_TIM3_Init+0xa4>)
  8001bac:	2200      	movs	r2, #0
  8001bae:	619a      	str	r2, [r3, #24]
-  sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
- 8001bb0:	2301      	movs	r3, #1
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
+ 8001bb0:	2303      	movs	r3, #3
  8001bb2:	60fb      	str	r3, [r7, #12]
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
  8001bb4:	2300      	movs	r3, #0

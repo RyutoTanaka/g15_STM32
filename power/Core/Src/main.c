@@ -184,6 +184,8 @@ int main(void)
   //CANスタート
   canInit(&hcan);
   size_t can_timeout_cnt = 0;
+  // relayをONにしてからMDに電源が入るまでの猶予
+  size_t motor_delay_cnt = 0;
 
   //timerスタート
   HAL_TIM_Base_Start_IT(&htim6);
@@ -198,14 +200,19 @@ int main(void)
   {
 		//mainloop wait
 		while(g_main_loop_flag == false){}
-		//ADCデータ確認＆CAN送信
-		PowerResult result;
-		result.i_bat = ADC_buff[0]>>4;
-		result.v_bat = ADC_buff[1]>>4;
-		setCanData(&result);
 
 		error.battery = batteryErrorCheck(ADC_buff[0], ADC_buff[1]);
 		error.emergency = HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin);
+
+		//ADCデータ確認
+		PowerResult result;
+		result.i_bat = ADC_buff[0]>>4;
+		result.v_bat = ADC_buff[1]>>4;
+		result.emergency = error.emergency;
+		result.motor_output = (motor_delay_cnt > 100);
+
+		//CAN送信
+		setCanData(&result);
 
 		switch(state){
 		case state_shutdown:
@@ -242,13 +249,18 @@ int main(void)
 			if(isNoError(error)&&command.motor_output==true){
 				printf("motor_on : \r\n");
 				HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, true);
+				motor_delay_cnt++;
 			}else{
-				printf("motor_off : \r\n");
+				//printf("motor_off : \r\n");
 				HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, false);
+				motor_delay_cnt = 0;
 			}
 			break;
 		}
-		//printf("%d,%d,%d,%d\r\n",state,ADC_buff[0],ADC_buff[1],HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin));
+
+
+
+		printf("%d,%d,%d,%d,%d\r\n",state,ADC_buff[0],ADC_buff[1],error.emergency,motor_delay_cnt);
     g_main_loop_flag = false;
     /* USER CODE END WHILE */
 

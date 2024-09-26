@@ -195,9 +195,10 @@ int main(void)
 		//encoder
 		static int last_cnt_l;
 		static int last_cnt_r;
-
+		// todo
 		int cnt_l = (int16_t)TIM2->CNT;
 		int cnt_r = (int16_t)TIM3->CNT;
+
 		if(abs(last_cnt_l - cnt_l) > 0x8000){
 			if (last_cnt_l > 0 && cnt_l < 0 && (last_cnt_l - cnt_l) > 0){
 				last_cnt_l -= 0x10000; //オーバーフロー
@@ -244,7 +245,7 @@ int main(void)
 			g_control = false;
 			printf("RIGHT_SPEED_ERROR : %f \r\n",vel_r);
 		}
-		if(result.power_result.i_bat > 40){
+		if(result.power_result.i_bat > 80){
 			g_control = false;
 			printf("OVER_CURRENT_ERROR : %d \r\n",result.power_result.i_bat);
 		}
@@ -562,7 +563,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 65525;
+  htim2.Init.Period = 65535;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
@@ -614,7 +615,7 @@ static void MX_TIM3_Init(void)
   htim3.Init.Period = 65535;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
