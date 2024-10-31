@@ -1,5 +1,5 @@
 ../Core/Src/spi_data.c:14:9:calculateChecksum	24	static
 ../Core/Src/spi_data.c:23:6:commandSerialize	24	static
-../Core/Src/spi_data.c:35:6:commandDeserialize	24	static
-../Core/Src/spi_data.c:46:6:resultSerialize	24	static
-../Core/Src/spi_data.c:62:6:resultDeserialize	24	static
+../Core/Src/spi_data.c:37:6:commandDeserialize	24	static
+../Core/Src/spi_data.c:50:6:resultSerialize	24	static
+../Core/Src/spi_data.c:68:6:resultDeserialize	24	static

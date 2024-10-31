@@ -87,6 +87,14 @@ bool isNoError(Error e){
 	return (e.battery==false) && (e.emergency==false);
 }
 
+bool errorReleaseRequest(bool sw){
+	static bool last_sw = false;
+	bool request;
+	request = (last_sw == true) && (sw == false);
+	last_sw = sw;
+	return request;
+}
+
 bool g_main_loop_flag = false;
 
 bool batteryErrorCheck(uint16_t,uint16_t);
@@ -111,12 +119,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 // バッテリーの電流、電圧、非常停止スイッチの状態を確認する　異常があればtrueを返す
 bool batteryErrorCheck(uint16_t i_bat,uint16_t v_bat){
-	static const uint16_t i_bat_th = 700;
+	static const uint16_t i_bat_th = 1000;
 	static const uint16_t v_bat_high_th = 16.0f/0.0039f;
-	static const uint16_t v_bat_low_th = 12.0f/0.0039f;
-	bool error = (i_bat > i_bat_th)
-			|| (v_bat > v_bat_high_th)
-			|| (v_bat < v_bat_low_th);
+	static const uint16_t v_bat_low_th = 8.0f/0.0039f;
+	static size_t nv;
+	static size_t ni;
+	if((v_bat > v_bat_high_th) || (v_bat < v_bat_low_th)) nv++;
+	else nv=0;
+	if(i_bat > i_bat_th)ni++;
+	else ni=0;
+	bool error = (nv > 10)	|| (ni > 2);
+	if (nv > 10) printf("Vbat error \r\n");
+	if (ni > 2) printf("Ibat error \r\n");
 	return error;
 }
 
@@ -186,6 +200,8 @@ int main(void)
   size_t can_timeout_cnt = 0;
   // relayをONにしてからMDに電源が入るまでの猶予
   size_t motor_delay_cnt = 0;
+  // エラー解除待機中
+  bool wait_flag=false;
 
   //timerスタート
   HAL_TIM_Base_Start_IT(&htim6);
@@ -209,7 +225,7 @@ int main(void)
 		result.i_bat = ADC_buff[0]>>4;
 		result.v_bat = ADC_buff[1]>>4;
 		result.emergency = error.emergency;
-		result.motor_output = (motor_delay_cnt > 100);
+		result.motor_output = (motor_delay_cnt > 10);
 
 		//CAN送信
 		setCanData(&result);
@@ -231,8 +247,12 @@ int main(void)
 				can_timeout_cnt = 0;
 				state = state_active;
 			}
+			canInit(&hcan);
 			break;
 		case state_active:
+			if(error.battery==true){
+				wait_flag = true;
+			}
 			//CANデータ確認
 			PowerCommand command;
 			if(isCanUpdated()==false) can_timeout_cnt++;
@@ -246,11 +266,12 @@ int main(void)
 			}
 
 			HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
-			if(isNoError(error)&&command.motor_output==true){
-				printf("motor_on : \r\n");
+			if (isNoError(error) == true && command.motor_output == true
+					&& wait_flag == false) {
+				//printf("motor_on : \r\n");
 				HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, true);
 				motor_delay_cnt++;
-			}else{
+			} else {
 				//printf("motor_off : \r\n");
 				HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, false);
 				motor_delay_cnt = 0;
@@ -260,7 +281,9 @@ int main(void)
 
 
 
-		printf("%d,%d,%d,%d,%d\r\n",state,ADC_buff[0],ADC_buff[1],error.emergency,motor_delay_cnt);
+		printf("%d,%d,%d\r\n",state,ADC_buff[0],ADC_buff[1]);
+
+		if(wait_flag==true && errorReleaseRequest(error.emergency))wait_flag = false;
     g_main_loop_flag = false;
     /* USER CODE END WHILE */
 
@@ -509,7 +532,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 38400;
+  huart2.Init.BaudRate = 115200;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;

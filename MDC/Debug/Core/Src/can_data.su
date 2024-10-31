@@ -2,3 +2,7 @@
 ../Core/Src/can_data.c:14:6:powerCommandDeserialize	16	static
 ../Core/Src/can_data.c:19:6:powerResultSerialize	16	static
 ../Core/Src/can_data.c:25:6:powerResultDeserialize	16	static
+../Core/Src/can_data.c:32:6:lockerCommandSerialize	16	static
+../Core/Src/can_data.c:35:6:lockerCommandDeserialize	16	static
+../Core/Src/can_data.c:38:6:lockerResultSerialize	16	static
+../Core/Src/can_data.c:41:6:lockerResultDeserialize	16	static

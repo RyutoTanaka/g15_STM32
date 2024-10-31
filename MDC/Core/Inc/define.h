@@ -23,9 +23,15 @@ const uint32_t MAX_DUTY_CNT = 7999;
 typedef struct {
 	float kp;
 	float ki;
+	float kd;
+
+	float kf;//feed foward
 
 	float integral_l;
 	float integral_r;
-}PIController;
+
+	float prev_error_l;
+	float prev_error_r;
+}PIDController;
 
 #endif /* INC_DEFINE_H_ */

@@ -85,7 +85,32 @@ static void MX_TIM7_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 bool g_main_loop_flag;
-bool g_control;
+
+typedef struct{
+	bool battery;
+	bool command;
+	bool speed;
+	bool spi_timeout;
+	bool power_timeout;
+}Error;
+
+bool isNoError(Error e){
+	return (e.battery == false)
+			&& (e.command == false)
+			&& (e.speed == false)
+			&& (e.spi_timeout == false)
+			&& (e.power_timeout == false);
+}
+
+bool errorReleaseRequest(bool sw){
+	static bool last_sw = false;
+	bool request;
+	request = (last_sw == true) && (sw == false);
+	last_sw = sw;
+	return request;
+}
+
+
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -144,11 +169,16 @@ int main(void)
   MX_TIM6_Init();
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
-	PIController pid;
+  	Error error = {0};
+	PIDController pid;
 	pid.kp = 5.0f;
-	pid.ki = 5.0f;
+	pid.ki = 0.0f;
+	pid.kd = 0.0f;
+	pid.kf = 3.0f;
 	pid.integral_l = 0.0f;
 	pid.integral_r = 0.0f;
+	pid.prev_error_l = 0.0f;
+	pid.prev_error_r = 0.0f;
 	spiInit(&hspi1);
 	canInit(&hcan);
 	HAL_TIM_Encoder_Start( &htim2, TIM_CHANNEL_ALL );
@@ -164,33 +194,46 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	size_t spi_timeout_cnt=0;
 	size_t power_timeout_cnt=0;
+	bool control = false;
+	bool wait_release_request = false;
   while (1)
   {
   	//wait main_loop_flag
 		while(g_main_loop_flag == false){}
 
 		//SPI
-		Command command = {0};
+		Command command;
+		command.power_command.motor_output = false;
+		command.power_command.power_off = false;
+		command.vel_l = 0.0f;
+		command.vel_r = 0.0f;
 		Result result = {0};
 		if(isSpiUpdated()){
+			error.spi_timeout = false;
 			spi_timeout_cnt = 0;
 		}
 		if(spi_timeout_cnt++ >= 5) {
-			g_control = false;
+			error.spi_timeout = true;
 			printf("SPI TIMEOUT ERROR %d \r\n",spi_timeout_cnt);
+		}else{
+			getSpiData(&command);
 		}
-		getSpiData(&command);
 
 		//CAN
 		if(isPowerUpdated()) {
+			error.power_timeout = false;
 			power_timeout_cnt = 0;
 		}
 		if(power_timeout_cnt++ >= 5) {
-			g_control = false;
+			error.power_timeout = true;
 			printf("POWER TIMEOUT ERROR %d \r\n",power_timeout_cnt);
 		}
+		if(error.power_timeout == true) {
+			canInit(&hcan);
+		} else {
+			getPowerCanData(&result.power_result);
+		}
 		setPowerCanData(&command.power_command);
-		getPowerCanData(&result.power_result);
 
 		//encoder
 		static int last_cnt_l;
@@ -222,54 +265,82 @@ int main(void)
 
 		//error check //todo 値決定
 		if(abs(command.vel_l) > 5.0f) {
-			g_control = false;
+			error.command = true;
 			printf("LEFT_COMMAND_ERROR : %f \r\n",command.vel_l);
-		}
+		} else error.command = false;
+
 		if(abs(command.vel_r) > 5.0f) {
-			g_control = false;
+			error.command = true;
 			printf("RIGHT_COMMAND_ERROR : %f \r\n",command.vel_r);
-		}
-		if(abs(pid.integral_l) > 100.0f){
-			g_control = false;
-			printf("LEFT_PID_ERROR : %f \r\n",pid.integral_l);
-		}
-		if(abs(pid.integral_r) > 100.0f){
-			g_control = false;
-			printf("RIGHT_PID_ERROR : %f \r\n",pid.integral_r);
-		}
+		} else error.command = false;
+
 		if(abs(vel_l) > 5.0f){
-			g_control = false;
+			error.speed = true;
 			printf("LEFT_SPEED_ERROR : %f \r\n",vel_l);
-		}
+		} else error.speed = false;
+
 		if(abs(vel_r) > 5.0f){
-			g_control = false;
+			error.speed = true;
 			printf("RIGHT_SPEED_ERROR : %f \r\n",vel_r);
-		}
+		} else error.speed = false;
+
 		if(result.power_result.i_bat > 80){
-			g_control = false;
+			error.battery = true;
 			printf("OVER_CURRENT_ERROR : %d \r\n",result.power_result.i_bat);
-		}
+		} else error.battery = false;
+
 		if(result.power_result.v_bat > 400){
-			g_control = false;
-			printf("OVER_VOLTAGE_ERROR : %d \r\n",result.power_result.v_bat);
-		}
-		if(result.power_result.v_bat < 200){
-			g_control = false;
-			printf("UNDER_VOLTAGE_ERROR : %d \r\n",result.power_result.v_bat);
-		}
-		if(result.power_result.emergency == true){
-			g_control = false;
-			printf("EMERGENCY SWITCH IS PUSHED \r\n");
-		}
-		if(result.power_result.motor_output == false){
-			g_control = false;
-			printf("MOTOR DRIVER IS NOT ACTIVE \r\n");
+			static size_t n=0;
+			if( n++ >10){
+				error.battery = true;
+				printf("OVER_VOLTAGE_ERROR : %d \r\n",result.power_result.v_bat);
+			}else n=0;
+		} else error.battery = false;
+
+		if(result.power_result.v_bat < 100){
+			static size_t n=0;
+			if( n++ >10){
+				error.battery = true;
+				printf("UNDER_VOLTAGE_ERROR : %d \r\n",result.power_result.v_bat);
+			}
+			else n=0;
+		} else error.battery = false;
+
+		//エラー解除
+		if (wait_release_request == true && isNoError(error) == true) {
+			if (errorReleaseRequest(result.power_result.emergency)) {
+				control = true;
+				wait_release_request = false;
+			} else {
+				control = false;
+				HAL_GPIO_TogglePin(Nucleo_LED_GPIO_Port, Nucleo_LED_Pin); //LED
+				//printf("wait for Release Request\r\n");
+			}
 		}
 
-		//PI control
+		//コントロール不可
+		if(isNoError(error) != true){
+			control = false;
+			wait_release_request = true;
+			HAL_GPIO_WritePin(Nucleo_LED_GPIO_Port, Nucleo_LED_Pin, false); //LED
+		}
+		if(result.power_result.emergency == true){
+			control = false;
+			printf("EMERGENCY SWITCH IS PUSHED \r\n");
+		}
+		else if(result.power_result.motor_output == false){
+			control = false;
+			printf("MOTOR DRIVER IS NOT ACTIVE \r\n");
+		}
+		else if(wait_release_request == false){
+			control = true;
+			HAL_GPIO_WritePin(Nucleo_LED_GPIO_Port, Nucleo_LED_Pin, true); //LED
+		}
+
+		//PID control
 		float volt_l;
 		float volt_r;
-		if (g_control) {
+		if (control) {
 			float e_l = command.vel_l - vel_l;
 			float e_r = command.vel_r - vel_r;
 			if(fabsf(e_l)>10.0f) e_l = 0;
@@ -278,33 +349,22 @@ int main(void)
 			pid.integral_r += e_r * DT;
 			pid.integral_l = fmaxf(fminf(pid.integral_l,2.5f),-2.5f);
 			pid.integral_r = fmaxf(fminf(pid.integral_r,2.5f),-2.5f);
-			volt_l = pid.kp * e_l + pid.ki * pid.integral_l;
-			volt_r = pid.kp * e_r + pid.ki * pid.integral_r;
-			//線形化
-			volt_l = (volt_l > 0.0f) ? volt_l + 0.9f : volt_l - 0.9f;
-			volt_r = (volt_r > 0.0f) ? volt_r + 0.9f : volt_r - 0.9f;
-//			volt_l = fmaxf(fminf(volt_l,12.0f),-12.0f);
-//			volt_r = fmaxf(fminf(volt_r,12.0f),-12.0f);
-			volt_l = fmaxf(fminf(volt_l, 6.0f), -6.0f);
-			volt_r = fmaxf(fminf(volt_r, 6.0f), -6.0f);
-			printf("%d,vel:(%f,%f),cmd:(%f,%f), volt:(%f,%f)\r\n",g_control,vel_l,vel_r,command.vel_l,command.vel_r,volt_l,volt_r);
+			volt_l = pid.kf * command.vel_l + pid.kp * e_l + pid.ki * pid.integral_l + pid.kd * (pid.prev_error_l - e_l) * RATE;
+			volt_r = pid.kf * command.vel_r + pid.kp * e_r + pid.ki * pid.integral_r + pid.kd * (pid.prev_error_r - e_r) * RATE;
+			pid.prev_error_l = e_l;
+			pid.prev_error_r = e_r;
+			//線形化 （-0.9から+0.9までの電圧ではタイヤが回らないため、特性が線形に近くなるように調整）
+			if(fabsf(volt_l) > 0.1f) volt_l = (volt_l > 0.0f) ? volt_l + 3.0f : volt_l - 3.0f;
+			if(fabsf(volt_r) > 0.1f) volt_r = (volt_r > 0.0f) ? volt_r + 3.0f : volt_r - 3.0f;
+			volt_l = fmaxf(fminf(volt_l, 8.0f), -8.0f);
+			volt_r = fmaxf(fminf(volt_r, 8.0f), -8.0f);
 
 		}
 		else{
-			// error 解除
-			// 指令速度異常
-			// PID制御異常（要検討）
-			// タイヤ速度異常
-			// SPI通信異常
-			// CAN通信異常
-			if ((abs(command.vel_l) < 5.0f) && (abs(command.vel_r) < 5.0f)
-					&& (abs(vel_l) < 5.0f) && (abs(vel_r) < 5.0f)
-					&& (result.power_result.i_bat < 40)
-					&& (result.power_result.v_bat < 400)) {
-				g_control = true;
-			}
 			pid.integral_l = 0.0f;
 			pid.integral_r = 0.0f;
+			pid.prev_error_l = 0.0f;
+			pid.prev_error_r = 0.0f;
 			volt_l = 0.0f;
 			volt_r = 0.0f;
 
@@ -315,7 +375,7 @@ int main(void)
 		uint32_t pwm_r;
 		bool dir_l;
 		bool dir_r;
-		if (g_control){
+		if (control){
 			pwm_l = (uint32_t)(MAX_DUTY_CNT * (fabsf(volt_l)/12.0f));
 			pwm_r = (uint32_t)(MAX_DUTY_CNT * (fabsf(volt_r)/12.0f));
 			dir_l = (volt_l > 0.0f) ? true : false;
@@ -792,6 +852,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(DIR_R_GPIO_Port, DIR_R_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Nucleo_LED_GPIO_Port, Nucleo_LED_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : DIR_L_Pin */
   GPIO_InitStruct.Pin = DIR_L_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -817,6 +880,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(DIR_R_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Nucleo_LED_Pin */
+  GPIO_InitStruct.Pin = Nucleo_LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(Nucleo_LED_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

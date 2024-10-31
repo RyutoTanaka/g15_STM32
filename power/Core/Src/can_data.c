@@ -29,3 +29,16 @@ void powerResultDeserialize(PowerResult* data, uint8_t* buffer){
 	data->i_bat = buffer[2];
 }
 
+void lockerCommandSerialize(LockerCommand* data, uint8_t* buffer){
+	memcpy(buffer,data,1);
+}
+void lockerCommandDeserialize(LockerCommand* data, uint8_t* buffer){
+	memcpy(data,buffer,1);
+}
+void lockerResultSerialize(LockerResult* data, uint8_t* buffer){
+	memcpy(buffer,data,1);
+}
+void lockerResultDeserialize(LockerResult* data, uint8_t* buffer){
+	memcpy(data,buffer,1);
+}
+

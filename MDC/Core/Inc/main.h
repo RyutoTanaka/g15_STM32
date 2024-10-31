@@ -85,6 +85,8 @@ void Error_Handler(void);
 #define SWCLK_GPIO_Port GPIOA
 #define VCP_RX_Pin GPIO_PIN_15
 #define VCP_RX_GPIO_Port GPIOA
+#define Nucleo_LED_Pin GPIO_PIN_3
+#define Nucleo_LED_GPIO_Port GPIOB
 #define enc_R_A_Pin GPIO_PIN_4
 #define enc_R_A_GPIO_Port GPIOB
 #define enc_R_B_Pin GPIO_PIN_5

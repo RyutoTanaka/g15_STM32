@@ -24,6 +24,8 @@ void commandSerialize(Command* data, uint8_t* buffer){
 	uint8_t length = 0;
 	powerCommandSerialize(&data->power_command, buffer);
 	length += POWER_COMMAND_BUFFER_SIZE;
+	lockerCommandSerialize(&data->locker_command, buffer+length);
+	length += LOCKER_COMMAND_BUFFER_SIZE;
 	memcpy(buffer+length,&data->vel_l,sizeof(float));
 	length += sizeof(float);
 	memcpy(buffer+length,&data->vel_r,sizeof(float));
@@ -35,6 +37,8 @@ void commandSerialize(Command* data, uint8_t* buffer){
 bool commandDeserialize(Command* data, uint8_t* buffer){
 	powerCommandDeserialize(&data->power_command, buffer);
 	uint8_t length = POWER_COMMAND_BUFFER_SIZE;
+	lockerCommandDeserialize(&data->locker_command,buffer+length);
+	length += LOCKER_COMMAND_BUFFER_SIZE;
 	memcpy(&data->vel_l,buffer+length,sizeof(float));
 	length += sizeof(float);
 	memcpy(&data->vel_r,buffer+length,sizeof(float));
@@ -47,6 +51,8 @@ void resultSerialize(Result* data, uint8_t* buffer){
 	uint8_t length = 0;
 	powerResultSerialize(&data->power_result, buffer);
 	length += POWER_RESULT_BUFFER_SIZE;
+	lockerResultSerialize(&data->locker_result,buffer+length);
+	length += LOCKER_RESULT_BUFFER_SIZE;
 	memcpy(buffer+length,&data->vel_l,sizeof(float));
 	length += sizeof(float);
 	memcpy(buffer+length,&data->vel_r,sizeof(float));
@@ -62,6 +68,8 @@ void resultSerialize(Result* data, uint8_t* buffer){
 bool resultDeserialize(Result* data, uint8_t* buffer){
 	powerResultDeserialize(&data->power_result, buffer);
 	uint8_t length =  POWER_RESULT_BUFFER_SIZE;
+	lockerResultDeserialize(&data->locker_result, buffer+length);
+	length += LOCKER_RESULT_BUFFER_SIZE;
 	memcpy(&data->vel_l,buffer+length,sizeof(float));
 	length += sizeof(float);
 	memcpy(&data->vel_r,buffer+length,sizeof(float));

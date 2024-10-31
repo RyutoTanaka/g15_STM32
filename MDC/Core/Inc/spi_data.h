@@ -17,6 +17,7 @@
 
 typedef struct{
 	PowerCommand power_command;
+	LockerCommand locker_command;
 	float vel_l;
 	float vel_r;
 	uint8_t check_sum;
@@ -24,6 +25,7 @@ typedef struct{
 
 typedef struct {
 	PowerResult power_result;
+	LockerResult locker_result;
 	float vel_l;
 	float vel_r;
 	uint16_t cnt_l;

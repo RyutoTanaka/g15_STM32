@@ -23,7 +23,7 @@ static CAN_FilterTypeDef g_filter;
 
 static bool g_power_updated = false;
 
-void canInit(CAN_HandleTypeDef *hcan){
+HAL_StatusTypeDef canInit(CAN_HandleTypeDef *hcan){
 	g_hcan = hcan;
 	g_filter.FilterIdHigh         = POWER_CAN_ID << 5;                       // フィルターID(上位16ビット)
 	g_filter.FilterIdLow          = POWER_CAN_ID << 5;                       // フィルターID(下位16ビット)                       // フィルターマスク(下位16ビット)
@@ -33,15 +33,17 @@ void canInit(CAN_HandleTypeDef *hcan){
 	g_filter.FilterMode           = CAN_FILTERMODE_IDLIST;    // フィルターモード
 	g_filter.SlaveStartFilterBank = 14;                       // スレーブCANの開始フィルターバンクNo
 	g_filter.FilterActivation     = ENABLE;                   // フィルター無効／有効
+	HAL_CAN_Stop(hcan);
 	if (HAL_CAN_Start(hcan) != HAL_OK){
-		Error_Handler();
+		return HAL_ERROR;
 	}
 	if (HAL_CAN_ConfigFilter(hcan, &g_filter) != HAL_OK){
-		Error_Handler();
+		return HAL_ERROR;
 	}
 	if (HAL_CAN_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK){
-		Error_Handler();
+		return HAL_ERROR;
 	}
+	return HAL_OK;
 }
 
 void getPowerCanData(PowerResult* res){
