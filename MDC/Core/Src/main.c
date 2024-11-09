@@ -92,6 +92,7 @@ typedef struct{
 	bool speed;
 	bool spi_timeout;
 	bool power_timeout;
+	bool locker_timeout;
 }Error;
 
 bool isNoError(Error e){
@@ -99,7 +100,8 @@ bool isNoError(Error e){
 			&& (e.command == false)
 			&& (e.speed == false)
 			&& (e.spi_timeout == false)
-			&& (e.power_timeout == false);
+			&& (e.power_timeout == false)
+			&& (e.locker_timeout == false);
 }
 
 bool errorReleaseRequest(bool sw){
@@ -121,12 +123,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		}
 		else{
 			g_main_loop_flag = true;
+			//printf("send state : %d\r\n",hcan.State);
+			sendCanData();
 		}
 	}
-	if(htim == &htim7){
-		sendPowerCanData();
-	}
-
 }
 /* USER CODE END 0 */
 
@@ -169,6 +169,7 @@ int main(void)
   MX_TIM6_Init();
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(100);
   	Error error = {0};
 	PIDController pid;
 	pid.kp = 5.0f;
@@ -181,6 +182,7 @@ int main(void)
 	pid.prev_error_r = 0.0f;
 	spiInit(&hspi1);
 	canInit(&hcan);
+	printf("end state : %d\r\n",hcan.State);
 	HAL_TIM_Encoder_Start( &htim2, TIM_CHANNEL_ALL );
 	HAL_TIM_Encoder_Start( &htim3, TIM_CHANNEL_ALL );
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -194,6 +196,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	size_t spi_timeout_cnt=0;
 	size_t power_timeout_cnt=0;
+	size_t locker_timeout_cnt = 0;
 	bool control = false;
 	bool wait_release_request = false;
   while (1)
@@ -203,8 +206,8 @@ int main(void)
 
 		//SPI
 		Command command;
-		command.power_command.motor_output = false;
-		command.power_command.power_off = false;
+		command.can_command.motor_output = false;
+		command.can_command.power_off = false;
 		command.vel_l = 0.0f;
 		command.vel_r = 0.0f;
 		Result result = {0};
@@ -214,7 +217,6 @@ int main(void)
 		}
 		if(spi_timeout_cnt++ >= 5) {
 			error.spi_timeout = true;
-			printf("SPI TIMEOUT ERROR %d \r\n",spi_timeout_cnt);
 		}else{
 			getSpiData(&command);
 		}
@@ -226,14 +228,34 @@ int main(void)
 		}
 		if(power_timeout_cnt++ >= 5) {
 			error.power_timeout = true;
-			printf("POWER TIMEOUT ERROR %d \r\n",power_timeout_cnt);
 		}
 		if(error.power_timeout == true) {
 			canInit(&hcan);
+			printf("power timeout\r\n");
 		} else {
 			getPowerCanData(&result.power_result);
 		}
-		setPowerCanData(&command.power_command);
+
+		if(isLockerUpdated()) {
+			error.locker_timeout = false;
+			locker_timeout_cnt = 0;
+		}
+		if(locker_timeout_cnt++ >= 5) {
+			error.locker_timeout = true;
+		}
+		if(error.locker_timeout == true){
+			canInit(&hcan);
+			printf("locker timeout\r\n");
+		} else{
+			getLockerCanData(&result.locker_result);
+		}
+
+		command.can_command.power_off = false;
+		command.can_command.motor_output = false;
+		command.can_command.mode = false;
+		command.can_command.pull = false;
+		command.can_command.release = false;
+		setCanData(&command.can_command);
 
 		//encoder
 		static int last_cnt_l;

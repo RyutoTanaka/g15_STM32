@@ -62,7 +62,7 @@ typedef struct{
 /* USER CODE BEGIN PD */
 #define CHAIR_TIMEOUT_MS 1000
 #define DESK_TIMEOUT_MS 3000
-#define MOTOR_DUTY 50 //(MAX:999)
+#define MOTOR_DUTY 200 //(MAX:999)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -76,14 +76,11 @@ CAN_HandleTypeDef hcan;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
-TIM_HandleTypeDef htim7;
 TIM_HandleTypeDef htim16;
 
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
-bool g_main_loop_flag = false;
 
 /* USER CODE END PV */
 
@@ -94,7 +91,6 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM6_Init(void);
-static void MX_TIM7_Init(void);
 static void MX_TIM16_Init(void);
 static void MX_CAN_Init(void);
 /* USER CODE BEGIN PFP */
@@ -108,6 +104,8 @@ enum state stateCheck(Button, Error*);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+bool g_main_loop_flag = false;
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim == &htim6)
@@ -116,11 +114,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		if(g_main_loop_flag){
 			printf("Control cycle is slow\r\n");
 		}
-		else{
-			g_main_loop_flag = true;
-		}
-	}
-	if(htim == &htim7){
+		g_main_loop_flag = true;
 		sendCanData();
 	}
 }
@@ -216,7 +210,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	setbuf(stdout, NULL);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -241,27 +235,24 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM6_Init();
-  MX_TIM7_Init();
   MX_TIM16_Init();
   MX_CAN_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(1000);
   enum state state = state_wait;
   Error error = {0};
-  HAL_Delay(1000);
   canInit(&hcan);
   bool can_wait = true;
   size_t can_timeout_cnt = 0;
 
   //timerスタート
-  HAL_TIM_Base_Start_IT(&htim6);
-  HAL_TIM_Base_Start_IT(&htim7);
-  HAL_TIM_Base_Start_IT(&htim16);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIM_Base_Start_IT(&htim16);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
-
-  HAL_Delay(100);
+	HAL_TIM_Base_Start_IT(&htim6);
+	//HAL_TIM_Base_Start_IT(&htim7);
 
   /* USER CODE END 2 */
 
@@ -269,10 +260,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	//mainloop wait
+	while(g_main_loop_flag == false){}
     bool servo_lock = false;
     bool servo_mode = false; //0:chair
-    //mainloop wait
-		while(g_main_loop_flag == false){}
     
     //センサーデータ収集
     LockerResult result;
@@ -284,76 +275,91 @@ int main(void)
     //can送信
     setCanData(&result);
     
-    if(can_wait == true){
-      if(isCanUpdated()){
-				can_timeout_cnt = 0;
-				can_wait = false;
+    if (can_wait == true) {
+    	if (isCanUpdated()) {
+			can_timeout_cnt = 0;
+			can_wait = false;
+			canInit(&hcan);
+		}
+    	else{
+			printf("can init");
+			canInit(&hcan);
+    	}
+	} else {
+			// CAN受信
+			CanCommand command;
+			if (isCanUpdated() == false){
+				can_timeout_cnt++;
 			}
-      canInit(&hcan);
-			break;
-    }
-    else {
-      // CAN受信
-      LockerCommand command;
-      if(isCanUpdated()==false) can_timeout_cnt++;
-			else can_timeout_cnt=0;
-      getCanData(&command);
+			else{
+				can_timeout_cnt = 0;
+			}
+			getCanData(&command);
 
-      //アーム制御
-      //無効なコマンド　（pull&release または 机保持中に椅子保持指令　または、椅子保持中に机保持）
-      if(command.pull == command.release 
-        || (command.mode == false && state == state_hold_desk) 
-        || (command.mode == true && state == state_hold_chair))
-      {
-        motor_command = command_free;
-      }
-      else if (command.pull == true){
-        enum state target_state = command.mode ? state_catch_desk : state_move_desk; 
-        if(state != target_state){
-          motor_command = command_cw;
-        } 
-        else{
-          motor_command = command_free;
-          servo_lock = true;
-        }
-      }
-      else if (command.release == true){
-        if(state != state_free){
-          motor_command = command_ccw;
-        }
-      }
-      
-      // モーター制御
-      switch(motor_command){
-      case command_free:
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
-        break;
-      case command_cw:
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, MOTOR_DUTY);
-        break;
-      case command_ccw:
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, MOTOR_DUTY);
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
-        break;
-      case command_brake:
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 999);
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 999);
-        break;
-      }
-      //サーボ制御
-      if(servo_lock == true){
-        if(servo_mode == false){
-          __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 999);
-          __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 000);
-        } 
-        else {
-          __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 000);
-          __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 999);
-        }
-      }
-    }
+			if(can_timeout_cnt > 5){
+				can_wait = true;
+			}
+			printf("mode : %d,pull : %d,release : %d,state:%d,sw:%d%d,%d%d,%d%d\r\n",command.mode,command.pull,command.release,state,button.chair[0],button.chair[1],
+		    		button.desk[0],button.desk[1],button.free[0],button.free[1]);
+			//アーム制御
+			//無効なコマンド　（pull&release または 机保持中に椅子保持指令　または、椅子保持中に机保持）
+			if (command.pull == command.release
+					|| (command.mode == false && state == state_hold_desk)
+					|| (command.mode == true && state == state_hold_chair)) {
+				motor_command = command_free;
+			} else if (command.pull == true) {
+				enum state target_state =
+						command.mode ? state_catch_desk : state_move_desk;
+				if (state != target_state) {
+					motor_command = command_cw;
+				} else {
+					motor_command = command_free;
+					servo_lock = true;
+				}
+			} else if (command.release == true) {
+				// 椅子や机を保持している場合は少し引いてからロック解除
+				static size_t cnt = 0;
+				if (state == state_hold_desk || state == state_hold_chair){
+					motor_command = command_cw;
+					if(cnt++ < 10) {
+						servo_lock = true;
+					}
+				}else cnt = 0;
+				if (state != state_free) {
+					motor_command = command_ccw;
+				}
+			}
+
+			// モーター制御
+			switch (motor_command) {
+			case command_free:
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
+				break;
+			case command_cw:
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, MOTOR_DUTY);
+				break;
+			case command_ccw:
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, MOTOR_DUTY);
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
+				break;
+			case command_brake:
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 999);
+				__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 999);
+				break;
+			}
+			//サーボ制御
+			if (servo_lock == true) {
+				if (servo_mode == false) {
+					__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 1200);
+					__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 250);
+				} else {
+					__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 250);
+					__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 1200);
+				}
+			}
+		}
 
 
     g_main_loop_flag = false;
@@ -423,11 +429,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN;
-  hcan.Init.Prescaler = 16;
+  hcan.Init.Prescaler = 3;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_15TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_4TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;
@@ -464,9 +470,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 159;
+  htim1.Init.Prescaler = 15;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 999;
+  htim1.Init.Period = 9999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -589,9 +595,9 @@ static void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 0;
+  htim6.Init.Prescaler = 7999;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 65535;
+  htim6.Init.Period = 19;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -606,44 +612,6 @@ static void MX_TIM6_Init(void)
   /* USER CODE BEGIN TIM6_Init 2 */
 
   /* USER CODE END TIM6_Init 2 */
-
-}
-
-/**
-  * @brief TIM7 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM7_Init(void)
-{
-
-  /* USER CODE BEGIN TIM7_Init 0 */
-
-  /* USER CODE END TIM7_Init 0 */
-
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM7_Init 1 */
-
-  /* USER CODE END TIM7_Init 1 */
-  htim7.Instance = TIM7;
-  htim7.Init.Prescaler = 0;
-  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim7.Init.Period = 65535;
-  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM7_Init 2 */
-
-  /* USER CODE END TIM7_Init 2 */
 
 }
 
@@ -695,7 +663,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 38400;
+  huart2.Init.BaudRate = 115200;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -753,7 +721,11 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+int _write(int file, char *ptr, int len)
+{
+  HAL_UART_Transmit(&huart2,(uint8_t *)ptr,len,10);
+  return len;
+}
 /* USER CODE END 4 */
 
 /**

@@ -188,12 +188,24 @@ int main(void)
   HAL_Delay(100);
 
   //エラーチェック後５Vオン&CANスタート
-	while (batteryErrorCheck(ADC_buff[0], ADC_buff[1]) == true
-			|| HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin)) {
-		HAL_Delay(1000);
-	}
+//	while (batteryErrorCheck(ADC_buff[0], ADC_buff[1]) == true
+//			|| HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin)) {
+//		printf("start error! Ibat:%d,Vbat%d,SW,%d\r\n",ADC_buff[0], ADC_buff[1],HAL_GPIO_ReadPin(emergency_switch_GPIO_Port,emergency_switch_Pin));
+//		HAL_Delay(1000);
+//	}
   HAL_GPIO_WritePin(jetson_power_GPIO_Port, jetson_power_Pin, true);
   HAL_Delay(100);
+
+
+
+
+
+
+
+
+
+
+
 
   //CANスタート
   canInit(&hcan);
@@ -247,6 +259,7 @@ int main(void)
 				can_timeout_cnt = 0;
 				state = state_active;
 			}
+			printf("can reinit\r\n");
 			canInit(&hcan);
 			break;
 		case state_active:
@@ -254,7 +267,7 @@ int main(void)
 				wait_flag = true;
 			}
 			//CANデータ確認
-			PowerCommand command;
+			CanCommand command;
 			if(isCanUpdated()==false) can_timeout_cnt++;
 			else can_timeout_cnt=0;
 			getCanData(&command);

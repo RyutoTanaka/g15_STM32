@@ -16,15 +16,19 @@
 #define POWER_CAN_ID 0x200
 #define LOCKER_CAN_ID 0x300
 
-#define POWER_COMMAND_BUFFER_SIZE 1
+#define CAN_COMMAND_BUFFER_SIZE 1
 #define POWER_RESULT_BUFFER_SIZE 3
-#define LOCKER_COMMAND_BUFFER_SIZE 1
 #define LOCKER_RESULT_BUFFER_SIZE 1
 
 typedef struct{
+	//power
 	bool motor_output;
 	bool power_off;
-} PowerCommand;
+	//locker
+	bool mode; //0:chair, 1:desk
+	bool pull;
+	bool release;
+} CanCommand;
 
 typedef struct {
 	bool emergency;
@@ -33,24 +37,15 @@ typedef struct {
 	uint8_t i_bat; // 0: 255:
 } PowerResult;
 
-typedef struct{
-	bool mode; //0:chair, 1:desk
-	bool pull;
-	bool release;
-	bool emergency;
-} LockerCommand;
-
 typedef struct {
 	uint8_t state;
 } LockerResult;
 
-void powerCommandSerialize(PowerCommand* data, uint8_t* buffer);
-void powerCommandDeserialize(PowerCommand* data, uint8_t* buffer);
+void canCommandSerialize(CanCommand* data, uint8_t* buffer);
+void canCommandDeserialize(CanCommand* data, uint8_t* buffer);
 void powerResultSerialize(PowerResult* data, uint8_t* buffer);
 void powerResultDeserialize(PowerResult* data, uint8_t* buffer);
 
-void lockerCommandSerialize(LockerCommand* data, uint8_t* buffer);
-void lockerCommandDeserialize(LockerCommand* data, uint8_t* buffer);
 void lockerResultSerialize(LockerResult* data, uint8_t* buffer);
 void lockerResultDeserialize(LockerResult* data, uint8_t* buffer);
 

@@ -11,11 +11,13 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include <stdio.h>
+
 #include "can_data.h"
 #include "stm32f3xx_hal_can.h"
 
 static uint8_t g_tx_data[POWER_RESULT_BUFFER_SIZE];
-static uint8_t g_rx_data[POWER_COMMAND_BUFFER_SIZE];
+static uint8_t g_rx_data[CAN_COMMAND_BUFFER_SIZE];
 
 static CAN_HandleTypeDef* g_hcan;
 
@@ -40,9 +42,9 @@ HAL_StatusTypeDef canInit(CAN_HandleTypeDef *hcan){
 	return HAL_OK;
 }
 
-void getCanData(PowerCommand* cmd){
+void getCanData(CanCommand* cmd){
 	g_updated = false;
-	powerCommandDeserialize(cmd, g_rx_data);
+	canCommandDeserialize(cmd, g_rx_data);
 }
 
 void setCanData(PowerResult* res){
@@ -56,7 +58,7 @@ bool isCanUpdated(){
 void sendCanData(){
 	CAN_TxHeaderTypeDef TxHeader;
 	uint32_t TxMailbox;
-	uint8_t data[POWER_RESULT_BUFFER_SIZE];
+	uint8_t data[8];
 	if(0 < HAL_CAN_GetTxMailboxesFreeLevel(g_hcan)){
 	    TxHeader.StdId = POWER_CAN_ID;          // CAN ID
 	    TxHeader.RTR = CAN_RTR_DATA;            // フレームタイプはデータフレーム
@@ -71,9 +73,10 @@ void sendCanData(){
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     CAN_RxHeaderTypeDef RxHeader;
-    uint8_t data[POWER_COMMAND_BUFFER_SIZE];
+    uint8_t data[8];
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, data) == HAL_OK)
     {
+    	//printf("callback %d",RxHeader.StdId);
 				g_updated = true;
 				memcpy(g_rx_data,data,sizeof(g_rx_data));
     }

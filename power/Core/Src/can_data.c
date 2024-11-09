@@ -7,13 +7,21 @@
 
 #include "can_data.h"
 
-void powerCommandSerialize(PowerCommand* data, uint8_t* buffer){
-	*buffer =  (uint8_t)(data->motor_output) + ((uint8_t)data->power_off << 1);
+void canCommandSerialize(CanCommand* data, uint8_t* buffer){
+	buffer[0] = data->motor_output
+						+ data->power_off << 1
+						+ data->mode      << 2
+						+ data->pull      << 3
+						+ data->release   << 4;
 }
 
-void powerCommandDeserialize(PowerCommand* data, uint8_t* buffer){
-	data->motor_output = (buffer[0]&0x01)==0x01;
-	data->power_off = (buffer[0]&0x02)==0x02;
+void canCommandDeserialize(CanCommand* data, uint8_t* buffer){
+	data->motor_output = (buffer[0] & 0b00000001) != 0;
+	data->power_off    = (buffer[0] & 0b00000010) != 0;
+	data->mode         = (buffer[0] & 0b00000100) != 0;
+	data->pull         = (buffer[0] & 0b00001000) != 0;
+	data->release      = (buffer[0] & 0b00010000) != 0;
+
 }
 
 void powerResultSerialize(PowerResult* data, uint8_t* buffer){
@@ -29,12 +37,6 @@ void powerResultDeserialize(PowerResult* data, uint8_t* buffer){
 	data->i_bat = buffer[2];
 }
 
-void lockerCommandSerialize(LockerCommand* data, uint8_t* buffer){
-	memcpy(buffer,data,1);
-}
-void lockerCommandDeserialize(LockerCommand* data, uint8_t* buffer){
-	memcpy(data,buffer,1);
-}
 void lockerResultSerialize(LockerResult* data, uint8_t* buffer){
 	memcpy(buffer,data,1);
 }

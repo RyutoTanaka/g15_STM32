@@ -16,8 +16,7 @@
 #include "can_data.h"
 
 typedef struct{
-	PowerCommand power_command;
-	LockerCommand locker_command;
+	CanCommand can_command;
 	float vel_l;
 	float vel_r;
 	uint8_t check_sum;

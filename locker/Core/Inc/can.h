@@ -15,7 +15,7 @@
 #include "stm32f3xx_hal_can.h"
 
 static uint8_t g_tx_data[LOCKER_RESULT_BUFFER_SIZE];
-static uint8_t g_rx_data[LOCKER_COMMAND_BUFFER_SIZE];
+static uint8_t g_rx_data[CAN_COMMAND_BUFFER_SIZE];
 
 static CAN_HandleTypeDef* g_hcan;
 
@@ -40,9 +40,9 @@ HAL_StatusTypeDef canInit(CAN_HandleTypeDef *hcan){
 	return HAL_OK;
 }
 
-void getCanData(LockerCommand* cmd){
+void getCanData(CanCommand* cmd){
 	g_updated = false;
-	lockerCommandDeserialize(cmd, g_rx_data);
+	canCommandDeserialize(cmd, g_rx_data);
 }
 
 void setCanData(LockerResult* res){
@@ -56,7 +56,7 @@ bool isCanUpdated(){
 void sendCanData(){
 	CAN_TxHeaderTypeDef TxHeader;
 	uint32_t TxMailbox;
-	uint8_t data[LOCKER_RESULT_BUFFER_SIZE];
+	uint8_t data[8];
 	if(0 < HAL_CAN_GetTxMailboxesFreeLevel(g_hcan)){
 	    TxHeader.StdId = LOCKER_CAN_ID;          // CAN ID
 	    TxHeader.RTR = CAN_RTR_DATA;            // フレームタイプはデータフレーム
@@ -71,7 +71,7 @@ void sendCanData(){
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     CAN_RxHeaderTypeDef RxHeader;
-    uint8_t data[LOCKER_COMMAND_BUFFER_SIZE];
+    uint8_t data[8];
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, data) == HAL_OK)
     {
 				g_updated = true;

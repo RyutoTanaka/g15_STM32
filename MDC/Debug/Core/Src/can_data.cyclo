@@ -1,8 +1,6 @@
-../Core/Src/can_data.c:10:6:powerCommandSerialize	1
-../Core/Src/can_data.c:14:6:powerCommandDeserialize	1
-../Core/Src/can_data.c:19:6:powerResultSerialize	1
-../Core/Src/can_data.c:25:6:powerResultDeserialize	1
-../Core/Src/can_data.c:32:6:lockerCommandSerialize	1
-../Core/Src/can_data.c:35:6:lockerCommandDeserialize	1
-../Core/Src/can_data.c:38:6:lockerResultSerialize	1
-../Core/Src/can_data.c:41:6:lockerResultDeserialize	1
+../Core/Src/can_data.c:10:6:canCommandSerialize	1
+../Core/Src/can_data.c:18:6:canCommandDeserialize	1
+../Core/Src/can_data.c:27:6:powerResultSerialize	1
+../Core/Src/can_data.c:33:6:powerResultDeserialize	1
+../Core/Src/can_data.c:40:6:lockerResultSerialize	1
+../Core/Src/can_data.c:43:6:lockerResultDeserialize	1
